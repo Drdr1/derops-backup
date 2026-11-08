@@ -63,7 +63,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // create
   const label = String(form.get("label") || "").trim();
-  const endpoint = String(form.get("endpoint") || "").trim().replace(/\/+$/, "");
+  // Providers often display the endpoint with the bucket appended (R2: .../<bucket>). Keep only the origin.
+  const endpointRaw = String(form.get("endpoint") || "").trim();
+  let endpoint = endpointRaw.replace(/\/+$/, "");
+  try {
+    endpoint = new URL(endpointRaw).origin;
+  } catch {
+    /* validated below */
+  }
   const region = String(form.get("region") || "auto").trim();
   const bucket = String(form.get("bucket") || "").trim();
   const prefix = String(form.get("prefix") || "").trim().replace(/^\/+|\/+$/g, "");
