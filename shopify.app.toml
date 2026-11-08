@@ -1,0 +1,45 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "dac3487a4ccabebaacdcfcb4ba6e6172"
+name = "derops-backup"
+application_url = "https://example.com"
+embedded = true
+
+[access_scopes]
+# Phase 1: store content only. No customers, no orders (avoids Protected Customer Data review).
+# write_* implies read_* on Shopify.
+scopes = """
+write_products,\
+write_themes,\
+write_files,\
+write_content,\
+write_online_store_navigation,\
+write_metaobjects,\
+write_metaobject_definitions,\
+write_discounts,\
+write_inventory,\
+read_locations\
+"""
+
+[webhooks]
+api_version = "2027-01"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  # Mandatory privacy webhooks (required for App Store review even though we store no customer data)
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/compliance"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true

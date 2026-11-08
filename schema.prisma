@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Shopify session storage (required by @shopify/shopify-app-react-router) ----------
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+
+  @@index([shop])
+}
+
+// ---------- Our tables ----------
+
+/// One row per installed store. Created on first auth, soft-closed on app/uninstalled.
+model Shop {
+  id            String    @id @default(cuid())
+  domain        String    @unique // e.g. derops-backup-dev.myshopify.com
+  name          String?
+  plan          Plan      @default(FREE)
+  shopifyPlan   String?   // basic / shopify / advanced / plus, from Shop.plan.displayName
+  installedAt   DateTime  @default(now())
+  uninstalledAt DateTime?
+  retentionDays Int       @default(30)
+  scheduleCron  String    @default("0 3 * * *") // daily 03:00 UTC
+  timezone      String    @default("UTC")
+  notifyEmail   String?
+
+  destinations Destination[]
+  snapshots    Snapshot[]
+  jobs         Job[]
+
+  @@index([uninstalledAt])
+}
+
+enum Plan {
+  FREE
+  BASIC
+  GROW
+  ADVANCED
+}
+
+/// Where backups are written. Merchant's own S3-compatible bucket, or our managed bucket.
+model Destination {
+  id        String          @id @default(cuid())
+  shopId    String
+  shop      Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  kind      DestinationKind
+  label     String
+  // S3-compatible config. Secrets are AES-256-GCM encrypted at rest (see app/lib/crypto.server.ts).
+  endpoint  String? // https://s3.amazonaws.com, https://<acct>.r2.cloudflarestorage.com, ...
+  region    String?
+  bucket    String?
+  prefix    String? // key prefix inside the bucket, defaults to shop domain
+  accessKeyEnc String?
+  secretKeyEnc String?
+  isDefault Boolean @default(true)
+  verifiedAt DateTime? // last successful write+read test
+  lastError  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  snapshots Snapshot[]
+
+  @@index([shopId])
+}
+
+enum DestinationKind {
+  MANAGED // our bucket
+  S3      // any S3-compatible: AWS, R2, B2, Wasabi, MinIO
+}
+
+/// One point-in-time backup run (full daily, manual, or an incremental triggered by webhooks).
+model Snapshot {
+  id            String         @id @default(cuid())
+  shopId        String
+  shop          Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  destinationId String
+  destination   Destination    @relation(fields: [destinationId], references: [id])
+  kind          SnapshotKind
+  status        SnapshotStatus @default(RUNNING)
+  startedAt     DateTime       @default(now())
+  finishedAt    DateTime?
+  manifestKey   String?        // <prefix>/<timestamp>/manifest.json
+  bytesWritten  BigInt         @default(0)
+  itemCount     Int            @default(0)
+  changedCount  Int            @default(0) // items whose hash differs from previous snapshot
+  error         String?
+  apiVersion    String?
+
+  items SnapshotItem[]
+
+  @@index([shopId, startedAt])
+}
+
+enum SnapshotKind {
+  FULL        // scheduled daily
+  MANUAL      // merchant pressed "Back up now"
+  INCREMENTAL // webhook-triggered, one or few resources
+}
+
+enum SnapshotStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL // some resources failed
+  FAILED
+}
+
+/// One backed-up resource version inside a snapshot. Content lives in object storage; this row is the index.
+model SnapshotItem {
+  id          String       @id @default(cuid())
+  snapshotId  String
+  snapshot    Snapshot     @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  resource    ResourceType
+  shopifyGid  String       // gid://shopify/Product/123, theme file: gid://shopify/OnlineStoreTheme/1#templates/index.json
+  title       String?      // product title, theme file name, page title... for the UI
+  contentHash String       // sha256 of the normalized JSON / file bytes
+  storageKey  String       // object key in the destination; may point to an earlier snapshot's key (dedup)
+  sizeBytes   Int
+  changed     Boolean      @default(true) // false => identical to previous snapshot (dedup hit)
+  deleted     Boolean      @default(false) // existed in previous snapshot, gone now
+
+  @@index([snapshotId, resource])
+  @@index([shopifyGid])
+}
+
+enum ResourceType {
+  PRODUCT
+  COLLECTION
+  THEME_FILE
+  FILE
+  METAOBJECT_DEFINITION
+  METAOBJECT
+  MENU
+  PAGE
+  BLOG
+  ARTICLE
+  DISCOUNT
+  SHOP_POLICY
+  INVENTORY_LEVEL
+}
+
+/// Background work queue mirror (BullMQ is the queue; this is the audit/history table the UI reads).
+model Job {
+  id         String    @id @default(cuid())
+  shopId     String
+  shop       Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type       JobType
+  status     JobStatus @default(QUEUED)
+  payload    Json?     // e.g. { snapshotItemId, targetThemeId } for restores
+  result     Json?
+  error      String?
+  attempts   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@index([shopId, createdAt])
+  @@index([status])
+}
+
+enum JobType {
+  BACKUP_FULL
+  BACKUP_INCREMENTAL
+  RESTORE_ITEM
+  RESTORE_THEME
+  VERIFY_DESTINATION
+  PRUNE_RETENTION
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+}
