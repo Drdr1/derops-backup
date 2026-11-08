@@ -31,7 +31,7 @@ type Pages = {
   "/app": {
     params: {};
   };
-  "/app/additional": {
+  "/app/destinations": {
     params: {};
   };
 };
@@ -39,7 +39,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/compliance" | "/auth/*" | "/app" | "/app/additional";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/compliance" | "/auth/*" | "/app" | "/app/destinations";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -63,11 +63,11 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/additional";
+    page: "/app" | "/app/destinations";
   };
-  "routes/app.additional.tsx": {
-    id: "routes/app.additional";
-    page: "/app/additional";
+  "routes/app.destinations.tsx": {
+    id: "routes/app.destinations";
+    page: "/app/destinations";
   };
   "routes/app._index.tsx": {
     id: "routes/app._index";
@@ -83,6 +83,6 @@ type RouteModules = {
   "routes/_index": typeof import("./app/routes/_index/route.tsx");
   "routes/auth.$": typeof import("./app/routes/auth.$.tsx");
   "routes/app": typeof import("./app/routes/app.tsx");
-  "routes/app.additional": typeof import("./app/routes/app.additional.tsx");
+  "routes/app.destinations": typeof import("./app/routes/app.destinations.tsx");
   "routes/app._index": typeof import("./app/routes/app._index.tsx");
 };

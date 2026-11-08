@@ -12,6 +12,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (session) {
     await db.session.deleteMany({ where: { shop } });
   }
+  // Keep snapshots/destinations rows (merchant may reinstall); just mark the shop closed.
+  await db.shop.updateMany({ where: { domain: shop }, data: { uninstalledAt: new Date() } });
 
   return new Response();
 };
