@@ -83,7 +83,7 @@ export default function Index() {
     else if (fetcher.data && !fetcher.data.ok) shopify.toast.show(fetcher.data.error ?? "Failed", { isError: true });
   }, [fetcher.data, shopify]);
 
-  const defaultDest = data.destinations[0];
+  const defaultDest = data.destinations.find((d) => d.verifiedAt) ?? data.destinations[0];
 
   return (
     <s-page heading="Backups">
