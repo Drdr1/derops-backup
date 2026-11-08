@@ -10,6 +10,7 @@ import prisma from "../app/db.server";
 import { QUEUE_NAME, redis, type BackupJobData } from "../app/lib/queue.server";
 import { runBackup } from "../app/backup/snapshot.server";
 import { verifyDestination } from "../app/lib/storage.server";
+import { restoreItem } from "../app/backup/restore.server";
 
 const concurrency = Number(process.env.WORKER_CONCURRENCY || 2);
 
@@ -40,6 +41,17 @@ const worker = new Worker<BackupJobData>(
             log,
           });
           break;
+        case "RESTORE_ITEM": {
+          const r = await restoreItem({
+            shopDomain: data.shopDomain,
+            snapshotItemId: data.snapshotItemId,
+            targetThemeId: data.targetThemeId,
+            log,
+          });
+          if (!r.ok) throw new Error(r.message);
+          result = r;
+          break;
+        }
         case "VERIFY_DESTINATION": {
           const dest = await prisma.destination.findUniqueOrThrow({ where: { id: data.destinationId } });
           try {

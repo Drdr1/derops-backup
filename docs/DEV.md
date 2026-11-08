@@ -48,3 +48,13 @@ app/backup/snapshot.server.ts   runBackup(): orchestrates a snapshot
 worker/index.ts              BullMQ worker process
 schema.prisma                Session + Shop, Destination, Snapshot, SnapshotItem, Job
 ```
+
+## Resources covered (Phase 1)
+| Resource | Backup | Restore | Notes |
+|---|---|---|---|
+| Products (variants, options, metafields, media refs) | bulk → `products.jsonl` | `productSet` (update in place or recreate) | media not re-attached on restore yet |
+| Collections | bulk → `collections.jsonl` | — (export only) | |
+| Theme files (all themes except DEMO) | per-file objects under `themes/<id>/`, dedup by checksum | `themeFilesUpsert` into same theme | whole-theme restore to a new unpublished theme: next |
+| Files (Content → Files) | `files.jsonl` + originals under `files/` for images & generic files | — | video/3D: metadata only |
+
+Snapshot detail page: `/app/snapshots/<id>` — filter by resource / title / changed-only, "Restore this version" per item.

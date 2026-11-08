@@ -132,7 +132,7 @@ export default function Index() {
             <s-table-body>
               {data.snapshots.map((s) => (
                 <s-table-row key={s.id}>
-                  <s-table-cell>{new Date(s.startedAt).toLocaleString()}</s-table-cell>
+                  <s-table-cell><s-link href={`/app/snapshots/${s.id}`}>{new Date(s.startedAt).toLocaleString()}</s-link></s-table-cell>
                   <s-table-cell>{s.kind}</s-table-cell>
                   <s-table-cell>
                     <s-badge tone={s.status === "SUCCESS" ? "success" : s.status === "RUNNING" ? "info" : "critical"}>

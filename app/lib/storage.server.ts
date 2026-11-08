@@ -22,6 +22,8 @@ export type Storage = {
   putStream(key: string, body: Readable, contentType?: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   getText(key: string): Promise<string>;
+  /** Read by an already-prefixed key, e.g. SnapshotItem.storageKey */
+  getFull(fullKey: string): Promise<Buffer>;
   del(key: string): Promise<void>;
   list(prefix: string): Promise<string[]>;
   fullKey(relative: string): string;
@@ -102,6 +104,10 @@ export function storageFor(dest: Destination): Storage {
     },
     async getText(key) {
       return (await this.get(key)).toString("utf8");
+    },
+    async getFull(key) {
+      const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      return streamToBuffer(res.Body as Readable);
     },
     async del(key) {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: fullKey(key) }));

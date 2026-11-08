@@ -5,6 +5,8 @@ import { unauthenticated, apiVersion } from "../shopify.server";
 import { storageFor, verifyDestination } from "../lib/storage.server";
 import { runBulkQuery, reassembleBulkJsonl } from "./bulk.server";
 import { PHASE1_BULK_RESOURCES, type ResourceDef } from "./resources.server";
+import { backupThemes } from "./themes.server";
+import { backupFiles } from "./files.server";
 
 export type RunBackupArgs = {
   shopDomain: string;
@@ -88,13 +90,37 @@ export async function runBackup(args: RunBackupArgs) {
     }
   }
 
+  // Non-bulk resources
+  const extra: { type: ResourceType; run: () => Promise<{ items: number; changed: number; bytes: number; manifestEntry: Manifest["resources"][string] }> }[] = [
+    { type: "THEME_FILE", run: () => backupThemes({ admin, storage, folder, snapshotId: snapshot.id, previousSnapshotId: previous?.id, log }) },
+    { type: "FILE", run: () => backupFiles({ admin, storage, folder, snapshotId: snapshot.id, previousSnapshotId: previous?.id, log }) },
+  ];
+  const totalResources = defs.length + extra.filter((e) => !args.resources || args.resources.includes(e.type)).length;
+  for (const e of extra) {
+    if (args.resources && !args.resources.includes(e.type)) continue;
+    try {
+      log(`export ${e.type}`);
+      const r = await e.run();
+      manifest.resources[e.type] = r.manifestEntry;
+      bytes += BigInt(r.bytes);
+      items += r.items;
+      changed += r.changed;
+      log(`${e.type}: ${r.items} items, ${r.changed} changed, ${r.bytes} bytes`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      failures.push(`${e.type}: ${msg}`);
+      manifest.resources[e.type] = { file: "", count: 0, sha256: "", error: msg };
+      log(`${e.type} FAILED: ${msg}`);
+    }
+  }
+
   manifest.finishedAt = new Date().toISOString();
   const manifestJson = JSON.stringify(manifest, null, 2);
   const manifestKey = `${folder}/manifest.json`;
   await storage.put(manifestKey, manifestJson, "application/json");
   bytes += BigInt(Buffer.byteLength(manifestJson));
 
-  const status = failures.length === 0 ? "SUCCESS" : failures.length === defs.length ? "FAILED" : "PARTIAL";
+  const status = failures.length === 0 ? "SUCCESS" : failures.length >= totalResources ? "FAILED" : "PARTIAL";
   await prisma.snapshot.update({
     where: { id: snapshot.id },
     data: {
@@ -119,7 +145,7 @@ type Manifest = {
   startedAt: string;
   finishedAt?: string;
   apiVersion: string;
-  resources: Record<string, { file: string; count: number; sha256: string; error?: string }>;
+  resources: Record<string, { file: string; count: number; sha256: string; error?: string; themes?: Record<string, unknown> }>;
 };
 
 async function backupResource(p: {
