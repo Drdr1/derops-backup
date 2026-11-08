@@ -4,7 +4,7 @@
  * Needs the same env as the app (SHOPIFY_API_KEY/SECRET, SCOPES, DATABASE_URL, REDIS_URL, ENCRYPTION_KEY).
  * In dev: `shopify app env pull` writes the Shopify vars into .env.
  */
-import "dotenv/config";
+import "./env";
 import { Worker, type Job as BullJob } from "bullmq";
 import prisma from "../app/db.server";
 import { QUEUE_NAME, redis, type BackupJobData } from "../app/lib/queue.server";
