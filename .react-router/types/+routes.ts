@@ -36,6 +36,11 @@ type Pages = {
       "id": string;
     };
   };
+  "/app/snapshots/:id/download": {
+    params: {
+      "id": string;
+    };
+  };
   "/app/destinations": {
     params: {};
   };
@@ -44,7 +49,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/compliance" | "/auth/*" | "/app" | "/app/snapshots/:id" | "/app/destinations";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/compliance" | "/auth/*" | "/app" | "/app/snapshots/:id" | "/app/snapshots/:id/download" | "/app/destinations";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -68,11 +73,15 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/snapshots/:id" | "/app/destinations";
+    page: "/app" | "/app/snapshots/:id" | "/app/snapshots/:id/download" | "/app/destinations";
   };
   "routes/app.snapshots.$id.tsx": {
     id: "routes/app.snapshots.$id";
-    page: "/app/snapshots/:id";
+    page: "/app/snapshots/:id" | "/app/snapshots/:id/download";
+  };
+  "routes/app.snapshots.$id.download.tsx": {
+    id: "routes/app.snapshots.$id.download";
+    page: "/app/snapshots/:id/download";
   };
   "routes/app.destinations.tsx": {
     id: "routes/app.destinations";
@@ -93,6 +102,7 @@ type RouteModules = {
   "routes/auth.$": typeof import("./app/routes/auth.$.tsx");
   "routes/app": typeof import("./app/routes/app.tsx");
   "routes/app.snapshots.$id": typeof import("./app/routes/app.snapshots.$id.tsx");
+  "routes/app.snapshots.$id.download": typeof import("./app/routes/app.snapshots.$id.download.tsx");
   "routes/app.destinations": typeof import("./app/routes/app.destinations.tsx");
   "routes/app._index": typeof import("./app/routes/app._index.tsx");
 };

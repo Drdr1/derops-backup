@@ -36,6 +36,7 @@
     "@shopify/app-bridge-react": "^4.2.4",
     "@shopify/shopify-app-react-router": "^4.0.0",
     "@shopify/shopify-app-session-storage-prisma": "^11.0.0",
+    "archiver": "^8.0.0",
     "bullmq": "^6.7.2",
     "dotenv": "^18.0.9",
     "ioredis": "^6.0.0",
@@ -49,6 +50,7 @@
   "devDependencies": {
     "@shopify/api-codegen-preset": "^1.2.0",
     "@shopify/polaris-types": "^2.0.0",
+    "@types/archiver": "^8.0.0",
     "@types/eslint": "^9.6.1",
     "@types/node": "^22.18.8",
     "@types/react": "^18.3.25",

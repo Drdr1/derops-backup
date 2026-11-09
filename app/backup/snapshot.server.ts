@@ -3,7 +3,7 @@ import type { Prisma, ResourceType, SnapshotKind } from "@prisma/client";
 import prisma from "../db.server";
 import { unauthenticated, apiVersion } from "../shopify.server";
 import { storageFor, verifyDestination } from "../lib/storage.server";
-import { runBulkQuery, reassembleBulkJsonl } from "./bulk.server";
+import { runBulkQuery, reassembleBulkJsonl, canonicalJson } from "./bulk.server";
 import { PHASE1_BULK_RESOURCES, type ResourceDef } from "./resources.server";
 import { backupThemes } from "./themes.server";
 import { backupFiles } from "./files.server";
@@ -184,7 +184,7 @@ async function backupResource(p: {
     lines.push(line);
     const gid = String(obj.id);
     seen.add(gid);
-    const hash = sha256(line);
+    const hash = sha256(canonicalJson(obj));
     const before = prev.get(gid);
     const isChanged = !before || before.contentHash !== hash;
     if (isChanged) changedCount++;

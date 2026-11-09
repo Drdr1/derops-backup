@@ -118,7 +118,28 @@ export function reassembleBulkJsonl(
     arr.push(obj);
     parent[key] = arr;
   }
+  // Shopify does not guarantee child ordering between runs; sort every child array by id so hashes are stable.
+  for (const r of roots) sortChildren(r);
   return roots;
+}
+
+function sortChildren(o: Record<string, unknown>) {
+  for (const v of Object.values(o)) {
+    if (Array.isArray(v) && v.length && typeof v[0] === "object" && v[0] && "id" in (v[0] as object)) {
+      (v as { id: string }[]).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      for (const c of v) sortChildren(c as Record<string, unknown>);
+    }
+  }
+}
+
+/** JSON.stringify with sorted keys at every level, for content hashing. */
+export function canonicalJson(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonicalJson).join(",")}]`;
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(o[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v);
 }
 
 export async function gql<T>(admin: Admin, query: string, variables?: Record<string, unknown>): Promise<T> {

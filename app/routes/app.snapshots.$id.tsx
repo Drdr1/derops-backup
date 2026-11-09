@@ -41,6 +41,20 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     take: PAGE,
   });
 
+  // Themes present in this snapshot (for "Download theme as .zip")
+  const themeFiles = await prisma.snapshotItem.findMany({
+    where: { snapshotId: snapshot.id, resource: "THEME_FILE", deleted: false },
+    select: { shopifyGid: true, title: true },
+  });
+  const themesMap = new Map<string, { gid: string; name: string; files: number }>();
+  for (const f of themeFiles) {
+    const gid = f.shopifyGid.split("#")[0];
+    const name = (f.title ?? "").split(" / ")[0] || gid.split("/").pop()!;
+    const t = themesMap.get(gid) ?? { gid, name, files: 0 };
+    t.files++;
+    themesMap.set(gid, t);
+  }
+
   const recentRestores = await prisma.job.findMany({
     where: { shopId: shop.id, type: "RESTORE_ITEM" },
     orderBy: { createdAt: "desc" },
@@ -70,6 +84,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       sizeBytes: i.sizeBytes,
     })),
     truncated: items.length === PAGE,
+    themes: [...themesMap.values()],
     recentRestores: recentRestores.map((j) => ({
       id: j.id,
       status: j.status,
@@ -131,6 +146,17 @@ export default function SnapshotPage() {
     return () => clearInterval(t);
   }, [data.pendingRestores, revalidator]);
 
+  // Downloads are plain GETs to an app route; attach a fresh session token so authenticate.admin accepts them.
+  const download = async (query: string) => {
+    const token = await shopify.idToken();
+    const a = document.createElement("a");
+    a.href = `/app/snapshots/${data.snapshot.id}/download?${query}&id_token=${encodeURIComponent(token)}`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
   return (
     <s-page heading={`Snapshot · ${new Date(data.snapshot.startedAt).toLocaleString()}`}>
       <s-section>
@@ -156,6 +182,22 @@ export default function SnapshotPage() {
           </s-stack>
         </form>
       </s-section>
+
+      {data.resource === "THEME_FILE" && data.themes.length > 0 && (
+        <s-section heading="Download a whole theme">
+          <s-paragraph>
+            Get the theme exactly as it was in this snapshot as a .zip, then upload it in Online Store → Themes → Add theme →
+            Upload zip file. It appears as a new unpublished theme you can preview before publishing.
+          </s-paragraph>
+          <s-stack direction="inline" gap="base">
+            {data.themes.map((t) => (
+              <s-button key={t.gid} onClick={() => download(`theme=${encodeURIComponent(t.gid)}`)}>
+                {t.name} ({t.files} files) .zip
+              </s-button>
+            ))}
+          </s-stack>
+        </s-section>
+      )}
 
       <s-section heading={`${RESOURCE_LABELS[data.resource] ?? data.resource} · ${data.items.length}${data.truncated ? "+" : ""}`}>
         {data.items.length === 0 ? (
@@ -185,6 +227,12 @@ export default function SnapshotPage() {
                   </s-table-cell>
                   <s-table-cell>{i.sizeBytes ? `${(i.sizeBytes / 1024).toFixed(1)} KB` : ""}</s-table-cell>
                   <s-table-cell>
+                    <s-stack direction="inline" gap="small-200">
+                    {!i.deleted && (
+                      <s-button variant="tertiary" onClick={() => download(`item=${i.id}`)}>
+                        Download
+                      </s-button>
+                    )}
                     {(data.resource === "PRODUCT" || data.resource === "THEME_FILE") && !i.deleted && (
                       <fetcher.Form method="post">
                         <input type="hidden" name="snapshotItemId" value={i.id} />
@@ -201,6 +249,7 @@ export default function SnapshotPage() {
                         </s-button>
                       </fetcher.Form>
                     )}
+                    </s-stack>
                   </s-table-cell>
                 </s-table-row>
               ))}
