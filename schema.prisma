@@ -45,6 +45,7 @@ model Shop {
   scheduleCron  String    @default("0 3 * * *") // daily 03:00 UTC
   timezone      String    @default("UTC")
   notifyEmail   String?
+  emailDaily    Boolean   @default(true)
 
   destinations Destination[]
   snapshots    Snapshot[]

@@ -58,3 +58,13 @@ schema.prisma                Session + Shop, Destination, Snapshot, SnapshotItem
 | Files (Content → Files) | `files.jsonl` + originals under `files/` for images & generic files | — | video/3D: metadata only |
 
 Snapshot detail page: `/app/snapshots/<id>` — filter by resource / title / changed-only, "Restore this version" per item.
+
+## Scheduling, retention, email (week 3)
+- One BullMQ **job scheduler** per shop (`daily:<shopId>`), cron from `Shop.scheduleCron` in `Shop.timezone`. Re-synced by
+  `syncShopSchedule()` whenever a destination is added/verified/removed, settings are saved, or the app is uninstalled.
+- Scheduled run = backup → `pruneShop()` (deletes snapshots past retention + their unreferenced objects; always keeps the
+  latest good snapshot) → optional summary email.
+- Email: set `SMTP_URL=smtp://user:pass@host:587` and `MAIL_FROM`. Without `SMTP_URL` the worker logs the email instead.
+- Settings page: `/app/settings` (hour, timezone, retention, notification email, daily summary toggle).
+- To test the scheduler quickly: set the hour to the next full hour, or temporarily edit `scheduleCron` in Postgres to
+  `*/5 * * * *` and call `syncShopSchedule` by saving Settings.

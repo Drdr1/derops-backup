@@ -11,6 +11,8 @@ import { QUEUE_NAME, redis, type BackupJobData } from "../app/lib/queue.server";
 import { runBackup } from "../app/backup/snapshot.server";
 import { verifyDestination } from "../app/lib/storage.server";
 import { restoreItem } from "../app/backup/restore.server";
+import { pruneShop } from "../app/backup/retention.server";
+import { sendMail, summaryEmail } from "../app/lib/mail.server";
 
 const concurrency = Number(process.env.WORKER_CONCURRENCY || 2);
 
@@ -22,6 +24,8 @@ const worker = new Worker<BackupJobData>(
       console.log(`[${data.type}] ${data.shopDomain}: ${msg}`);
       void job.log(msg);
     };
+
+    if (data.type === "SCHEDULED_BACKUP") return runScheduledBackup(data.shopDomain, data.destinationId, log);
 
     await prisma.job.update({
       where: { id: data.jobId },
@@ -83,6 +87,73 @@ const worker = new Worker<BackupJobData>(
   },
   { connection: redis(), concurrency },
 );
+
+async function runScheduledBackup(shopDomain: string, destinationId: string, log: (m: string) => void) {
+  const shop = await prisma.shop.findUnique({ where: { domain: shopDomain }, include: { destinations: true } });
+  if (!shop || shop.uninstalledAt) {
+    log("shop missing or uninstalled; skipping");
+    return { skipped: true };
+  }
+  // The scheduler was created with a destination id; fall back to the first verified one if it was removed.
+  const dest = shop.destinations.find((d) => d.id === destinationId) ?? shop.destinations.find((d) => d.verifiedAt);
+  if (!dest) {
+    log("no destination; skipping");
+    return { skipped: true };
+  }
+
+  const row = await prisma.job.create({
+    data: { shopId: shop.id, type: "BACKUP_FULL", status: "RUNNING", startedAt: new Date(), payload: { destinationId: dest.id, scheduled: true } },
+  });
+
+  let result: Awaited<ReturnType<typeof runBackup>> | undefined;
+  let error: string | undefined;
+  try {
+    result = await runBackup({ shopDomain, destinationId: dest.id, kind: "FULL", jobId: row.id, log });
+    await prisma.job.update({ where: { id: row.id }, data: { status: "SUCCESS", finishedAt: new Date(), result: result as never } });
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e);
+    await prisma.job.update({ where: { id: row.id }, data: { status: "FAILED", finishedAt: new Date(), error } });
+  }
+
+  try {
+    const pruned = await pruneShop(shop.id, log);
+    if (pruned.deletedSnapshots) log(`retention: removed ${pruned.deletedSnapshots} snapshot(s), ${pruned.deletedObjects} object(s)`);
+  } catch (e) {
+    log(`retention failed: ${e instanceof Error ? e.message : e}`);
+  }
+
+  if (shop.notifyEmail && shop.emailDaily) {
+    const snap = result ? await prisma.snapshot.findUnique({ where: { id: result.snapshotId } }) : null;
+    const perResource: Record<string, { count: number; error?: string }> = {};
+    if (snap) {
+      const counts = await prisma.snapshotItem.groupBy({ by: ["resource"], where: { snapshotId: snap.id, deleted: false }, _count: { _all: true } });
+      for (const c of counts) perResource[c.resource] = { count: c._count._all };
+      for (const f of result?.failures ?? []) {
+        const [r, ...rest] = f.split(": ");
+        perResource[r] = { count: 0, error: rest.join(": ") };
+      }
+    }
+    const mail = summaryEmail({
+      shopName: shop.name ?? shop.domain,
+      status: result?.status ?? "FAILED",
+      startedAt: snap?.startedAt ?? new Date(),
+      items: result?.items ?? 0,
+      changed: result?.changed ?? 0,
+      bytes: result?.bytes ?? 0,
+      failures: error ? [error] : (result?.failures ?? []),
+      perResource,
+      snapshotUrl: snap ? `https://${shop.domain}/admin/apps/${process.env.SHOPIFY_APP_HANDLE || "derops-backup"}/app/snapshots/${snap.id}` : undefined,
+    });
+    try {
+      await sendMail(shop.notifyEmail, mail.subject, mail.text);
+    } catch (e) {
+      log(`email failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  if (error) throw new Error(error);
+  return result;
+}
 
 worker.on("ready", () => console.log(`worker ready on queue "${QUEUE_NAME}" (concurrency ${concurrency})`));
 worker.on("failed", (job, err) => console.error(`job ${job?.id} failed: ${err.message}`));

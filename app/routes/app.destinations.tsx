@@ -7,6 +7,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { encrypt } from "../lib/crypto.server";
 import { verifyDestination } from "../lib/storage.server";
+import { syncShopSchedule } from "../lib/schedule.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -43,6 +44,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "delete") {
     const id = String(form.get("id"));
     await prisma.destination.deleteMany({ where: { id, shopId: shop.id } });
+    await syncShopSchedule(shop.id);
     return { ok: true, message: "Destination removed" };
   }
 
@@ -53,6 +55,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     try {
       await verifyDestination(dest);
       await prisma.destination.update({ where: { id }, data: { verifiedAt: new Date(), lastError: null } });
+      await syncShopSchedule(shop.id);
       return { ok: true, message: "Bucket verified: write, read and delete all work" };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -102,7 +105,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     await verifyDestination(dest);
     await prisma.destination.update({ where: { id: dest.id }, data: { verifiedAt: new Date() } });
-    return { ok: true, message: "Destination saved and verified" };
+    await syncShopSchedule(shop.id);
+    return { ok: true, message: "Destination saved and verified. Daily backups are now scheduled." };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await prisma.destination.update({ where: { id: dest.id }, data: { lastError: msg } });
