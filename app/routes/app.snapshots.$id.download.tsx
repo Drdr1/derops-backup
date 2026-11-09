@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { create as createArchive } from "archiver";
+import { ZipArchive } from "archiver";
 import { PassThrough, Readable } from "node:stream";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -59,7 +59,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     const themeName = (files[0].title ?? "theme").split(" / ")[0].replace(/[^\w.-]+/g, "_");
     const stamp = snapshot.startedAt.toISOString().slice(0, 16).replace(/[:T]/g, "-");
 
-    const zip = createArchive("zip", { zlib: { level: 6 } });
+    const zip = new ZipArchive({ zlib: { level: 6 } });
     const out = new PassThrough();
     zip.pipe(out);
 
