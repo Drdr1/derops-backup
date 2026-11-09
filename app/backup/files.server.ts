@@ -47,15 +47,36 @@ const FILES_QUERY = `#graphql
   }
 }`;
 
-function originalUrl(o: Record<string, unknown>): string | undefined {
+/**
+ * Two URLs per file:
+ *  - stableUrl: the CDN URL with Shopify's ?v=<version> — identical between runs until the file changes. Used for hashing.
+ *  - downloadUrl: the best-quality source. For MediaImage, originalSource.url is a *signed, expiring* URL that differs
+ *    on every query, so it must never be hashed, only downloaded from.
+ */
+function fileUrls(o: Record<string, unknown>): { stableUrl?: string; downloadUrl?: string } {
   const typename = o.__typename as string;
-  if (typename === "GenericFile") return o.url as string | undefined;
+  if (typename === "GenericFile") {
+    const url = o.url as string | undefined;
+    return { stableUrl: url, downloadUrl: url };
+  }
   if (typename === "MediaImage") {
     const src = o.originalSource as { url?: string } | undefined;
     const img = o.image as { url?: string } | undefined;
-    return src?.url ?? img?.url;
+    return { stableUrl: img?.url ?? src?.url, downloadUrl: src?.url ?? img?.url };
   }
-  return undefined; // Video / Model3d: metadata only
+  return {}; // Video / Model3d: metadata only
+}
+
+/** Strip query params that are not the version marker, so signed params never leak into the hash. */
+function stableKey(url: string): string {
+  try {
+    const u = new URL(url);
+    const v = u.searchParams.get("v");
+    u.search = v ? `?v=${v}` : "";
+    return u.toString();
+  } catch {
+    return url;
+  }
 }
 
 function basenameFromUrl(url: string): string {
@@ -99,9 +120,9 @@ export async function backupFiles(p: {
   for (const obj of objects) {
     const gid = String(obj.id);
     seen.add(gid);
-    const src = originalUrl(obj);
-    // Hash = the versioned URL when we have one (cheap, exact), else the metadata line.
-    const hash = createHash("sha256").update(src ?? JSON.stringify(obj)).digest("hex");
+    const { stableUrl, downloadUrl: src } = fileUrls(obj);
+    // Hash = the versioned CDN URL when we have one (cheap, exact), else the metadata line.
+    const hash = createHash("sha256").update(stableUrl ? stableKey(stableUrl) : JSON.stringify(obj)).digest("hex");
     const before = prev.get(gid);
     const isChanged = !before || before.contentHash !== hash;
 
