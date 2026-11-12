@@ -69,6 +69,15 @@ Snapshot detail page: `/app/snapshots/<id>` — filter by resource / title / cha
 - To test the scheduler quickly: set the hour to the next full hour, or temporarily edit `scheduleCron` in Postgres to
   `*/5 * * * *` and call `syncShopSchedule` by saving Settings.
 
+## Theme restore
+
+Shopify granted the theme-write exemption (Nov 12 2026) for backup/restore use only.
+- Single file: `themeFilesUpsert` into the original theme (overwrites that file).
+- Whole theme: `themeCreate` from a 1-hour presigned URL of a zip we write to
+  `<prefix>/_restore/` in the merchant's bucket; the zip is deleted after Shopify
+  finishes processing. Always creates a NEW unpublished theme — never touches the live one.
+- Per the exemption, the app must never install/distribute/upload themes other than the merchant's own backups.
+
 ## No tunnel? Run on localhost
 
 If Cloudflare's quick tunnel fails, run the app without one:

@@ -3,6 +3,7 @@ import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import { storageFor } from "../lib/storage.server";
 import { gql } from "./bulk.server";
+import { themeZipBuffer } from "./themezip.server";
 
 export type RestoreResult = { ok: true; message: string; shopifyId?: string } | { ok: false; message: string };
 
@@ -210,4 +211,95 @@ async function restoreThemeFile(
   const errs = res.themeFilesUpsert.userErrors;
   if (errs.length) return { ok: false, message: errs.map((e) => e.message).join("; ") };
   return { ok: true, shopifyId: themeId, message: `Restored ${filename} into theme ${themeId.split("/").pop()}` };
+}
+
+// ---------------------------------------------------------------- whole themes
+
+/**
+ * Restore a theme from a snapshot as a NEW unpublished theme (never touches the live theme).
+ * Flow: zip the snapshot's files → put the zip in the merchant's bucket → hand Shopify a
+ * 1-hour presigned URL via themeCreate → wait until Shopify finishes processing → delete the zip.
+ * Requires Shopify's theme-write exemption (granted for backup/restore use only).
+ */
+export async function restoreTheme(args: {
+  shopDomain: string;
+  snapshotId: string;
+  themeGid: string;
+  log?: (m: string) => void;
+}): Promise<RestoreResult> {
+  const log = args.log ?? (() => {});
+  const snapshot = await prisma.snapshot.findUniqueOrThrow({
+    where: { id: args.snapshotId },
+    include: { destination: true, shop: true },
+  });
+  if (snapshot.shop.domain !== args.shopDomain) throw new Error("Snapshot does not belong to this shop");
+
+  const files = await prisma.snapshotItem.findMany({
+    where: { snapshotId: snapshot.id, resource: "THEME_FILE", deleted: false, shopifyGid: { startsWith: `${args.themeGid}#` } },
+    select: { shopifyGid: true, storageKey: true, title: true },
+  });
+  if (files.length === 0) return { ok: false, message: "No files for this theme in the snapshot" };
+
+  const storage = storageFor(snapshot.destination);
+  const { admin } = await unauthenticated.admin(args.shopDomain);
+
+  const themeName = (files[0].title ?? "theme").split(" / ")[0];
+  const stamp = snapshot.startedAt.toISOString().slice(0, 16).replace("T", " ");
+  const newName = `${themeName} (restored ${stamp})`.slice(0, 50); // Shopify caps theme names at 50 chars
+
+  log(`zipping ${files.length} files of "${themeName}"`);
+  const zip = await themeZipBuffer(storage, files);
+  const tmpKey = `_restore/${args.themeGid.split("/").pop()}-${Date.now()}.zip`;
+  await storage.put(tmpKey, zip, "application/zip");
+  const source = await storage.presignGet(tmpKey, 3600);
+  log(`zip ${zip.byteLength} bytes at ${tmpKey}; calling themeCreate`);
+  let keepZip = false;
+
+  try {
+    const res = await gql<{
+      themeCreate: {
+        theme: { id: string; name: string; processing: boolean } | null;
+        userErrors: { field: string[] | null; message: string }[];
+      };
+    }>(
+      admin,
+      `#graphql
+      mutation restoreTheme($source: URL!, $name: String!) {
+        themeCreate(source: $source, name: $name) {
+          theme { id name processing }
+          userErrors { field message }
+        }
+      }`,
+      { source, name: newName },
+    );
+    const errs = res.themeCreate.userErrors;
+    if (errs.length) return { ok: false, message: errs.map((e) => e.message).join("; ") };
+    const theme = res.themeCreate.theme!;
+
+    // Shopify downloads and unpacks the zip asynchronously; poll until done (or give up after ~5 min).
+    let processing = theme.processing;
+    for (let i = 0; processing && i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const t = await gql<{ theme: { processing: boolean; processingFailed: boolean } | null }>(
+        admin,
+        `#graphql
+        query themeStatus($id: ID!) { theme(id: $id) { processing processingFailed } }`,
+        { id: theme.id },
+      );
+      if (!t.theme) return { ok: false, message: "Theme disappeared while Shopify was processing it" };
+      if (t.theme.processingFailed) return { ok: false, message: "Shopify failed to process the theme zip" };
+      processing = t.theme.processing;
+    }
+    if (processing) {
+      keepZip = true; // Shopify may still be fetching it; the zip is small and lives in the merchant's own bucket
+      return { ok: true, shopifyId: theme.id, message: `Created "${theme.name}"; Shopify is still processing it — check Online Store → Themes.` };
+    }
+    return {
+      ok: true,
+      shopifyId: theme.id,
+      message: `Restored as new unpublished theme "${theme.name}" (${files.length} files). Preview it in Online Store → Themes, then publish when ready.`,
+    };
+  } finally {
+    if (!keepZip) await storage.del(tmpKey).catch((e) => log(`could not delete ${tmpKey}: ${e}`));
+  }
 }

@@ -7,6 +7,7 @@ export type BackupJobData =
   | { type: "BACKUP_FULL"; shopDomain: string; jobId: string; destinationId: string; resources?: string[]; kind?: "FULL" | "MANUAL" }
   | { type: "VERIFY_DESTINATION"; shopDomain: string; jobId: string; destinationId: string }
   | { type: "RESTORE_ITEM"; shopDomain: string; jobId: string; snapshotItemId: string; targetThemeId?: string }
+  | { type: "RESTORE_THEME"; shopDomain: string; jobId: string; snapshotId: string; themeGid: string }
   // Fired by the per-shop job scheduler; creates its own Job row, runs backup, prunes, emails.
   | { type: "SCHEDULED_BACKUP"; shopDomain: string; destinationId: string };
 

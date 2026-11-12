@@ -1,9 +1,9 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { ZipArchive } from "archiver";
-import { PassThrough, Readable } from "node:stream";
+import { Readable } from "node:stream";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { storageFor } from "../lib/storage.server";
+import { themeZipStream } from "../backup/themezip.server";
 
 /**
  * GET /app/snapshots/:id/download?theme=gid://shopify/OnlineStoreTheme/123   -> theme as .zip (upload in Online Store > Themes)
@@ -59,26 +59,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     const themeName = (files[0].title ?? "theme").split(" / ")[0].replace(/[^\w.-]+/g, "_");
     const stamp = snapshot.startedAt.toISOString().slice(0, 16).replace(/[:T]/g, "-");
 
-    const zip = new ZipArchive({ zlib: { level: 6 } });
-    const out = new PassThrough();
-    zip.pipe(out);
-
-    // Pull files from storage with modest concurrency, append in deterministic order.
-    (async () => {
-      try {
-        const sorted = [...files].sort((a, b) => a.shopifyGid.localeCompare(b.shopifyGid));
-        const CONC = 8;
-        for (let i = 0; i < sorted.length; i += CONC) {
-          const batch = sorted.slice(i, i + CONC);
-          const bufs = await Promise.all(batch.map((f) => storage.getFull(f.storageKey)));
-          batch.forEach((f, j) => zip.append(bufs[j], { name: f.shopifyGid.split("#")[1] }));
-        }
-        await zip.finalize();
-      } catch (e) {
-        zip.destroy(e as Error);
-        out.destroy(e as Error);
-      }
-    })();
+    const out = themeZipStream(storage, files);
 
     return new Response(Readable.toWeb(out) as ReadableStream, {
       headers: {

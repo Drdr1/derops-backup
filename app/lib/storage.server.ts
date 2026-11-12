@@ -7,6 +7,7 @@ import {
   HeadBucketCommand,
 } from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Destination } from "@prisma/client";
 import type { Readable } from "node:stream";
 import { decrypt } from "./crypto.server";
@@ -26,6 +27,8 @@ export type Storage = {
   getFull(fullKey: string): Promise<Buffer>;
   del(key: string): Promise<void>;
   list(prefix: string): Promise<string[]>;
+  /** Time-limited HTTPS URL for a GET of this key (used to hand a theme zip to Shopify). */
+  presignGet(key: string, expiresInSeconds?: number): Promise<string>;
   fullKey(relative: string): string;
 };
 
@@ -111,6 +114,9 @@ export function storageFor(dest: Destination): Storage {
     },
     async del(key) {
       await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: fullKey(key) }));
+    },
+    async presignGet(key, expiresInSeconds = 3600) {
+      return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: fullKey(key) }), { expiresIn: expiresInSeconds });
     },
     async list(rel) {
       const keys: string[] = [];

@@ -56,7 +56,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const recentRestores = await prisma.job.findMany({
-    where: { shopId: shop.id, type: "RESTORE_ITEM" },
+    where: { shopId: shop.id, type: { in: ["RESTORE_ITEM", "RESTORE_THEME"] } },
     orderBy: { createdAt: "desc" },
     take: 5,
   });
@@ -100,6 +100,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = await prisma.shop.findUniqueOrThrow({ where: { domain: session.shop } });
   const form = await request.formData();
+
+  if (form.get("intent") === "restoreTheme") {
+    const snapshotId = String(form.get("snapshotId") || "");
+    const themeGid = String(form.get("themeGid") || "");
+    const snap = await prisma.snapshot.findFirst({ where: { id: snapshotId, shopId: shop.id }, select: { id: true } });
+    if (!snap || !themeGid.startsWith("gid://shopify/OnlineStoreTheme/")) return { ok: false, error: "Theme not found" };
+    const job = await prisma.job.create({
+      data: { shopId: shop.id, type: "RESTORE_THEME", status: "QUEUED", payload: { snapshotId, themeGid } },
+    });
+    await backupQueue().add(
+      "restore-theme",
+      { type: "RESTORE_THEME", shopDomain: shop.domain, jobId: job.id, snapshotId, themeGid },
+      { attempts: 1 },
+    );
+    return { ok: true };
+  }
+
   const snapshotItemId = String(form.get("snapshotItemId") || "");
 
   const item = await prisma.snapshotItem.findFirst({
@@ -146,6 +163,11 @@ export default function SnapshotPage() {
     return () => clearInterval(t);
   }, [data.pendingRestores, revalidator]);
 
+  const restoreTheme = (themeGid: string, name: string) => {
+    if (!confirm(`Restore "${name}" from this snapshot as a new unpublished theme?`)) return;
+    fetcher.submit({ intent: "restoreTheme", snapshotId: data.snapshot.id, themeGid }, { method: "post" });
+  };
+
   // Downloads are plain GETs to an app route; attach a fresh session token so authenticate.admin accepts them.
   const download = async (query: string) => {
     const token = await shopify.idToken();
@@ -184,16 +206,28 @@ export default function SnapshotPage() {
       </s-section>
 
       {data.resource === "THEME_FILE" && data.themes.length > 0 && (
-        <s-section heading="Download a whole theme">
+        <s-section heading="Restore a whole theme">
           <s-paragraph>
-            Get the theme exactly as it was in this snapshot as a .zip, then upload it in Online Store → Themes → Add theme →
-            Upload zip file. It appears as a new unpublished theme you can preview before publishing.
+            Restore creates a <b>new unpublished theme</b> from this snapshot — your live theme is never modified. Preview it in
+            Online Store → Themes and publish when you are happy. Or download the .zip and keep it anywhere.
           </s-paragraph>
-          <s-stack direction="inline" gap="base">
+          <s-stack direction="block" gap="base">
             {data.themes.map((t) => (
-              <s-button key={t.gid} onClick={() => download(`theme=${encodeURIComponent(t.gid)}`)}>
-                {t.name} ({t.files} files) .zip
-              </s-button>
+              <s-stack key={t.gid} direction="inline" gap="base" alignItems="center">
+                <s-text>
+                  <b>{t.name}</b> · {t.files} files
+                </s-text>
+                <s-button
+                  variant="primary"
+                  disabled={data.pendingRestores > 0 ? true : undefined}
+                  onClick={() => restoreTheme(t.gid, t.name)}
+                >
+                  Restore as new theme
+                </s-button>
+                <s-button variant="tertiary" onClick={() => download(`theme=${encodeURIComponent(t.gid)}`)}>
+                  Download .zip
+                </s-button>
+              </s-stack>
             ))}
           </s-stack>
         </s-section>
