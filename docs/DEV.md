@@ -68,3 +68,17 @@ Snapshot detail page: `/app/snapshots/<id>` — filter by resource / title / cha
 - Settings page: `/app/settings` (hour, timezone, retention, notification email, daily summary toggle).
 - To test the scheduler quickly: set the hour to the next full hour, or temporarily edit `scheduleCron` in Postgres to
   `*/5 * * * *` and call `syncShopSchedule` by saving Settings.
+
+## No tunnel? Run on localhost
+
+If Cloudflare's quick tunnel fails, run the app without one:
+
+```bash
+sudo true   # cache sudo for mkcert
+.shopify/mkcert -install -key-file .shopify/localhost-key.pem -cert-file .shopify/localhost.pem localhost   # first time only
+shopify app dev --use-localhost -c local
+```
+
+`shopify.app.local.toml` is the same app without webhook subscriptions (Shopify
+rejects localhost webhook URLs). Uninstall/compliance webhooks are not delivered
+in this mode; everything else (backups, restores, scheduler) works.
