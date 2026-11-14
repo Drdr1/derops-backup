@@ -2,7 +2,7 @@
 
 client_id = "dac3487a4ccabebaacdcfcb4ba6e6172"
 name = "derops-backup"
-application_url = "https://example.com"
+application_url = "https://backup.derops.dev"
 embedded = true
 
 [access_scopes]
@@ -38,8 +38,9 @@ api_version = "2027-01"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://backup.derops.dev/auth/callback", "https://backup.derops.dev/auth/shopify/callback", "https://backup.derops.dev/api/auth/callback" ]
 
 [build]
 include_config_on_deploy = true
-automatically_update_urls_on_dev = true
+# Production app (has the theme-write exemption). Never run `app dev` against it; use `-c dev`.
+automatically_update_urls_on_dev = false

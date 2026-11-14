@@ -10,4 +10,4 @@ for i in $(seq 1 20); do
   docker compose exec -T postgres pg_isready -U derops >/dev/null 2>&1 && break
   sleep 1
 done
-shopify app dev
+shopify app dev -c dev

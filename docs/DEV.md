@@ -91,3 +91,9 @@ shopify app dev --use-localhost -c local
 `shopify.app.local.toml` is the same app without webhook subscriptions (Shopify
 rejects localhost webhook URLs). Uninstall/compliance webhooks are not delivered
 in this mode; everything else (backups, restores, scheduler) works.
+
+## Dev vs production apps
+
+`shopify.app.toml` = production (backup.derops.dev, exemption holder). Do not run `app dev` with it.
+`shopify.app.dev.toml` = your dev app; create it once with `shopify app config link` → "Create a new app" →
+name `derops-backup-dev`, then `scripts/dev-web.sh` runs `shopify app dev -c dev`.

@@ -1,0 +1,52 @@
+# Production: docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DATABASE_URL: postgresql://derops:${POSTGRES_PASSWORD}@postgres:5432/derops_backup
+      REDIS_URL: redis://redis:6379
+      PORT: "3000"
+    ports:
+      - "127.0.0.1:3458:3000"   # Caddy reverse-proxies backup.derops.dev → here
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["npx", "tsx", "worker/index.ts"]
+    env_file: .env.production
+    environment:
+      DATABASE_URL: postgresql://derops:${POSTGRES_PASSWORD}@postgres:5432/derops_backup
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      web: { condition: service_started }   # web runs the migrations first
+      redis: { condition: service_started }
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: derops
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: derops_backup
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U derops -d derops_backup"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:
