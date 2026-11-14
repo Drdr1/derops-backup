@@ -17,11 +17,15 @@ cd ~/derops-backup
 cp .env.production.example .env.production
 nano .env.production      # fill SHOPIFY_API_SECRET, POSTGRES_PASSWORD, ENCRYPTION_KEY (see comments)
 
-# Caddy: add to /etc/caddy/Caddyfile
-#   backup.derops.dev {
-#       reverse_proxy 127.0.0.1:3458
-#   }
-systemctl reload caddy
+# Shared network between Caddy (container "caddy", ~/caddy/docker-compose.yml) and this app
+docker network create edge_proxy
+#   ~/caddy/docker-compose.yml: add `edge` to caddy's networks + `edge: {name: edge_proxy, external: true}` under networks
+#   ~/caddy/Caddyfile: add
+#     backup.derops.dev {
+#         import security_headers
+#         reverse_proxy derops-backup-web:3000
+#     }
+cd ~/caddy && docker compose up -d
 
 ./scripts/deploy.sh       # build + start web, worker, postgres, redis
 curl -s https://backup.derops.dev/healthz   # → ok

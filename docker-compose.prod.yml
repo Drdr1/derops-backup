@@ -2,14 +2,14 @@
 services:
   web:
     build: .
+    container_name: derops-backup-web
     restart: unless-stopped
     env_file: .env.production
     environment:
       DATABASE_URL: postgresql://derops:${POSTGRES_PASSWORD}@postgres:5432/derops_backup
       REDIS_URL: redis://redis:6379
       PORT: "3000"
-    ports:
-      - "127.0.0.1:3458:3000"   # Caddy reverse-proxies backup.derops.dev → here
+    networks: [default, edge]   # `edge` is shared with the Caddy container, which proxies backup.derops.dev → derops-backup-web:3000
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_started }
@@ -50,3 +50,8 @@ services:
 volumes:
   pgdata:
   redisdata:
+
+networks:
+  edge:
+    name: edge_proxy
+    external: true
