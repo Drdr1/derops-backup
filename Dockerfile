@@ -16,7 +16,8 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev && npm i --no-save tsx@4 && npm cache clean --force
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/build ./build
-COPY schema.prisma migrations ./
+COPY schema.prisma ./
+COPY migrations ./migrations
 COPY app ./app
 COPY worker ./worker
 COPY tsconfig.json ./
