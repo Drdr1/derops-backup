@@ -39,5 +39,4 @@ api_version = "2027-01"
 redirect_urls = [ "https://example.com/api/auth" ]
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true

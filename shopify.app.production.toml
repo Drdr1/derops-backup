@@ -41,6 +41,5 @@ api_version = "2027-01"
 redirect_urls = [ "https://backup.derops.dev/auth/callback", "https://backup.derops.dev/auth/shopify/callback", "https://backup.derops.dev/api/auth/callback" ]
 
 [build]
-include_config_on_deploy = true
 # Production app (has the theme-write exemption). Never run `app dev` against it; use `-c dev`.
 automatically_update_urls_on_dev = false
