@@ -34,13 +34,19 @@ export async function syncShopSchedule(shopId: string) {
   return { scheduled: true, cron: shop.scheduleCron, tz: shop.timezone };
 }
 
-/** Human-readable "daily at 03:00" from a cron like "0 3 * * *". */
+/** Human-readable "daily at 03:00" / "weekly on Sunday at 03:00" from our two cron shapes. */
 export function describeCron(cron: string): string {
-  const m = cron.match(/^(\d{1,2}) (\d{1,2}) \* \* \*$/);
+  const m = cron.match(/^(\d{1,2}) (\d{1,2}) \* \* (\*|0)$/);
   if (!m) return cron;
-  return `daily at ${m[2].padStart(2, "0")}:${m[1].padStart(2, "0")}`;
+  const hhmm = `${m[2].padStart(2, "0")}:${m[1].padStart(2, "0")}`;
+  return m[3] === "0" ? `weekly on Sunday at ${hhmm}` : `daily at ${hhmm}`;
 }
 
-export function cronForHour(hour: number, minute = 0): string {
-  return `${minute} ${hour} * * *`;
+export function cronForHour(hour: number, minute = 0, cadence: "daily" | "weekly" = "daily"): string {
+  return `${minute} ${hour} * * ${cadence === "weekly" ? "0" : "*"}`;
+}
+
+export function hourFromCron(cron: string): number {
+  const m = cron.match(/^\d{1,2} (\d{1,2}) /);
+  return m ? Number(m[1]) : 3;
 }

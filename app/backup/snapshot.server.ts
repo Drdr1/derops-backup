@@ -5,6 +5,7 @@ import { unauthenticated, apiVersion } from "../shopify.server";
 import { storageFor, verifyDestination } from "../lib/storage.server";
 import { runBulkQuery, reassembleBulkJsonl, canonicalJson } from "./bulk.server";
 import { PHASE1_BULK_RESOURCES, type ResourceDef } from "./resources.server";
+import { allowedResources } from "../lib/billing.server";
 import { backupThemes } from "./themes.server";
 import { backupFiles } from "./files.server";
 
@@ -36,6 +37,9 @@ export async function runBackup(args: RunBackupArgs) {
 
   const { admin } = await unauthenticated.admin(args.shopDomain);
   const storage = storageFor(destination);
+  // Plan gate: FREE backs up themes only; paid plans everything in Phase 1.
+  args = { ...args, resources: allowedResources(shop.plan, args.resources) };
+  log(`plan ${shop.plan}: resources ${args.resources!.join(", ")}`);
 
   const startedAt = new Date();
   const folder = `${shop.domain}/${startedAt.toISOString().replace(/[:.]/g, "-")}`;

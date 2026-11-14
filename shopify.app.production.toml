@@ -32,6 +32,10 @@ api_version = "2027-01"
   uri = "/webhooks/app/scopes_update"
   topics = [ "app/scopes_update" ]
 
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/subscriptions_update"
+  topics = [ "app_subscriptions/update" ]
+
   # Mandatory privacy webhooks (required for App Store review even though we store no customer data)
   [[webhooks.subscriptions]]
   uri = "/webhooks/compliance"

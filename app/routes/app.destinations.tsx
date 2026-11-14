@@ -8,6 +8,7 @@ import prisma from "../db.server";
 import { encrypt } from "../lib/crypto.server";
 import { verifyDestination } from "../lib/storage.server";
 import { syncShopSchedule } from "../lib/schedule.server";
+import { PLANS } from "../lib/billing.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -80,6 +81,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const accessKey = String(form.get("accessKey") || "").trim();
   const secretKey = String(form.get("secretKey") || "").trim();
 
+  const maxDest = PLANS[shop.plan].maxDestinations;
+  if ((await prisma.destination.count({ where: { shopId: shop.id } })) >= maxDest) {
+    return {
+      ok: false,
+      error: maxDest === 1
+        ? "Your plan includes one destination. Remove the existing one, or upgrade to Advanced for up to 5."
+        : `Your plan includes up to ${maxDest} destinations.`,
+    };
+  }
   if (!label || !endpoint || !bucket || !accessKey || !secretKey) {
     return { ok: false, error: "Label, endpoint, bucket, access key and secret key are required." };
   }

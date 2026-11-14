@@ -97,3 +97,20 @@ in this mode; everything else (backups, restores, scheduler) works.
 `shopify.app.production.toml` = production (backup.derops.dev, exemption holder). Deploy with `shopify app deploy -c production`. Never run `app dev` with it.
 `shopify.app.dev.toml` = dev app derops-backup-dev; `scripts/dev-web.sh` runs `shopify app dev -c dev`.
 `shopify.app.local.toml` = same dev app without webhooks, for `shopify app dev --use-localhost -c local`.
+
+## Billing (Shopify managed pricing)
+
+Plans live in the Dev Dashboard (app → Distribution → Pricing), Shopify hosts the plan picker and
+bills the merchant; the app never calls the Billing API. `app/lib/billing.server.ts` maps the active
+subscription *name* to our `Plan` enum — plan names must contain "Basic", "Grow" or "Advanced"
+(anything else = FREE) — and `PLANS` holds what each plan allows (resources, cadence, retention,
+destinations, manual backups/month). `syncPlan` runs on every app page load; the
+`app_subscriptions/update` webhook applies changes immediately. Upgrade button → pricingUrl()
+(`/charges/<app-handle>/pricing_plans`); set `SHOPIFY_APP_HANDLE` if the handle isn't `derops-backup`.
+
+| Plan | $/mo | Resources | Schedule | Retention | Destinations | Manual/mo |
+|---|---|---|---|---|---|---|
+| Free | 0 | themes | weekly | 7 | 1 | 3 |
+| Basic | 9 | all | daily | 7/30 | 1 | 30 |
+| Grow | 19 | all | daily | 7/30/90/365 | 1 | unlimited |
+| Advanced | 39 | all | daily | 7/30/90/365 | 5 | unlimited |

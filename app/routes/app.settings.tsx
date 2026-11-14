@@ -5,7 +5,8 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { cronForHour, describeCron, syncShopSchedule } from "../lib/schedule.server";
+import { cronForHour, describeCron, hourFromCron, syncShopSchedule } from "../lib/schedule.server";
+import { PLANS, pricingUrl } from "../lib/billing.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -13,9 +14,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     where: { domain: session.shop },
     include: { destinations: { where: { verifiedAt: { not: null } }, select: { id: true } } },
   });
-  const hourMatch = shop.scheduleCron.match(/^(\d{1,2}) (\d{1,2}) \* \* \*$/);
   return {
-    hour: hourMatch ? Number(hourMatch[2]) : 3,
+    hour: hourFromCron(shop.scheduleCron),
+    cadence: PLANS[shop.plan].schedule,
+    retentionOptions: PLANS[shop.plan].retentionOptions,
+    planLabel: PLANS[shop.plan].label,
+    pricingUrl: pricingUrl(shop.domain),
     timezone: shop.timezone,
     retentionDays: shop.retentionDays,
     notifyEmail: shop.notifyEmail ?? "",
@@ -24,13 +28,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     hasDestination: shop.destinations.length > 0,
     plan: shop.plan,
   };
-};
-
-const RETENTION_BY_PLAN: Record<string, number[]> = {
-  FREE: [7, 30], // until billing lands; default retention is 30
-  BASIC: [7, 30],
-  GROW: [7, 30, 90, 365],
-  ADVANCED: [7, 30, 90, 365],
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -50,7 +47,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   } catch {
     return { ok: false, error: `Unknown timezone "${timezone}". Use an IANA name like Africa/Cairo or America/New_York.` };
   }
-  const allowed = RETENTION_BY_PLAN[shop.plan] ?? [7];
+  const allowed = PLANS[shop.plan].retentionOptions;
   if (!allowed.includes(retentionDays)) {
     return { ok: false, error: `Retention of ${retentionDays} days is not available on the ${shop.plan} plan.` };
   }
@@ -60,7 +57,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   await prisma.shop.update({
     where: { id: shop.id },
-    data: { scheduleCron: cronForHour(hour), timezone, retentionDays, notifyEmail, emailDaily },
+    data: { scheduleCron: cronForHour(hour, 0, PLANS[shop.plan].schedule), timezone, retentionDays, notifyEmail, emailDaily },
   });
   const sync = await syncShopSchedule(shop.id);
   return {
@@ -83,7 +80,7 @@ export default function Settings() {
     else shopify.toast.show(fetcher.data.error ?? "Failed", { isError: true, duration: 8000 });
   }, [fetcher.data, shopify]);
 
-  const retentionOptions = RETENTION_BY_PLAN[data.plan] ?? [7];
+  const retentionOptions = data.retentionOptions;
 
   return (
     <s-page heading="Settings">

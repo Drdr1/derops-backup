@@ -7,6 +7,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { ensureShop } from "../lib/shop.server";
 import { backupQueue } from "../lib/queue.server";
+import { PLANS, pricingUrl, manualBackupsThisMonth } from "../lib/billing.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -23,8 +24,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     prisma.job.count({ where: { shopId: shop.id, status: { in: ["QUEUED", "RUNNING"] } } }),
   ]);
 
+  const manualUsed = await manualBackupsThisMonth(shop.id);
+  const features = PLANS[shop.plan];
   return {
     shop: { name: shop.name, domain: shop.domain, plan: shop.plan, shopifyPlan: shop.shopifyPlan },
+    plan: {
+      label: features.label,
+      blurb: features.blurb,
+      manualUsed,
+      manualLimit: Number.isFinite(features.manualBackupsPerMonth) ? features.manualBackupsPerMonth : null,
+      pricingUrl: pricingUrl(shop.domain),
+    },
     destinations: destinations.map((d) => ({ id: d.id, label: d.label, kind: d.kind, verifiedAt: d.verifiedAt, lastError: d.lastError })),
     snapshots: snapshots.map((s) => ({
       id: s.id,
@@ -50,6 +60,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const destination = await prisma.destination.findFirst({ where: { id: destinationId, shopId: shop.id } });
   if (!destination) return { ok: false, error: "Pick a destination first." };
+
+  const limit = PLANS[shop.plan].manualBackupsPerMonth;
+  if (Number.isFinite(limit) && (await manualBackupsThisMonth(shop.id)) >= limit) {
+    return { ok: false, error: `The ${PLANS[shop.plan].label} plan includes ${limit} manual backups a month. Upgrade for more.` };
+  }
 
   const job = await prisma.job.create({
     data: { shopId: shop.id, type: "BACKUP_FULL", status: "QUEUED", payload: { destinationId } },
@@ -155,10 +170,17 @@ export default function Index() {
         )}
       </s-section>
 
-      <s-section slot="aside" heading="Store">
-        <s-paragraph>{data.shop.name ?? data.shop.domain}</s-paragraph>
+      <s-section slot="aside" heading={`Plan: ${data.plan.label}`}>
+        <s-paragraph>{data.plan.blurb}</s-paragraph>
         <s-paragraph>
-          Shopify plan: {data.shop.shopifyPlan ?? "unknown"} · App plan: {data.shop.plan}
+          Manual backups this month: {data.plan.manualUsed}
+          {data.plan.manualLimit !== null ? ` of ${data.plan.manualLimit}` : " (unlimited)"}
+        </s-paragraph>
+        <s-button href={data.plan.pricingUrl} target="_top" variant={data.shop.plan === "FREE" ? "primary" : "secondary"}>
+          {data.shop.plan === "FREE" ? "Upgrade" : "Change plan"}
+        </s-button>
+        <s-paragraph>
+          <s-text tone="neutral">{data.shop.name ?? data.shop.domain} · Shopify {data.shop.shopifyPlan ?? ""}</s-text>
         </s-paragraph>
       </s-section>
     </s-page>
