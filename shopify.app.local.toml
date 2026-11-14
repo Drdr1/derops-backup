@@ -1,10 +1,10 @@
 # Dev-only config for `shopify app dev --use-localhost -c local`.
-# Same app (client_id) as shopify.app.toml, but without webhook subscriptions:
+# Same app as shopify.app.dev.toml, but without webhook subscriptions:
 # Shopify refuses to register webhooks pointing at localhost, and it could not
 # deliver them anyway. Use the main config whenever a tunnel is available.
 
-client_id = "dac3487a4ccabebaacdcfcb4ba6e6172"
-name = "derops-backup"
+client_id = "a5a2e943406326a9be422f0a456922fc"
+name = "derops-backup-dev"
 application_url = "https://localhost:3458"
 embedded = true
 

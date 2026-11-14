@@ -34,10 +34,10 @@ ssh root@VPS 'cd ~/derops-backup && ./scripts/deploy.sh'
 ```
 
 Then, from your laptop, push the app config (scopes, webhooks, URLs) to Shopify whenever
-`shopify.app.toml` changed:
+`shopify.app.production.toml` changed:
 
 ```bash
-shopify app deploy        # uses shopify.app.toml = production app
+shopify app deploy -c production
 ```
 
 ## Backups of the backup app
