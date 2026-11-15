@@ -74,12 +74,77 @@ export function planFromSubscriptionName(name: string | null | undefined): Plan 
   return "FREE";
 }
 
-/** Shopify-hosted plan picker for managed pricing. Opens outside the iframe (target="_top"). */
+/**
+ * Where "Upgrade" goes. Default: our own /app/plans page (Billing API, works without an App Store
+ * listing). Set SHOPIFY_MANAGED_PRICING=1 to send merchants to Shopify's hosted plan picker instead.
+ */
 export function pricingUrl(shopDomain: string) {
+  if (process.env.SHOPIFY_MANAGED_PRICING !== "1") return "/app/plans";
   const store = shopDomain.replace(/\.myshopify\.com$/, "");
   const handle = process.env.SHOPIFY_APP_HANDLE || "derops-backup";
   return `https://admin.shopify.com/store/${store}/charges/${handle}/pricing_plans`;
 }
+
+/** Dev / staff stores must use test charges; real stores pay. BILLING_TEST=1 forces test mode. */
+export function isTestShop(shop: Shop) {
+  if (process.env.BILLING_TEST === "1") return true;
+  return /develop|staff|partner|preview|trial/i.test(shop.shopifyPlan ?? "");
+}
+
+export type ActiveSubscription = { id: string; name: string; status: string; test: boolean };
+
+export async function activeSubscriptions(admin: AdminApiContext): Promise<ActiveSubscription[]> {
+  const res = await admin.graphql(
+    `#graphql
+    query activeSubs { currentAppInstallation { activeSubscriptions { id name status test } } }`,
+  );
+  const body = (await res.json()) as { data?: { currentAppInstallation: { activeSubscriptions: ActiveSubscription[] } } };
+  return body.data?.currentAppInstallation.activeSubscriptions ?? [];
+}
+
+/**
+ * Billing API path: create a recurring subscription for `plan` and return Shopify's confirmation
+ * URL, which the merchant must approve (top-level redirect). Shopify then fires
+ * app_subscriptions/update and we apply the plan.
+ */
+export async function createSubscription(admin: AdminApiContext, shop: Shop, plan: Exclude<Plan, "FREE">, returnUrl: string) {
+  const f = PLANS[plan];
+  const res = await admin.graphql(
+    `#graphql
+    mutation subscribe($name: String!, $returnUrl: URL!, $test: Boolean!, $trialDays: Int!, $amount: Decimal!) {
+      appSubscriptionCreate(
+        name: $name
+        returnUrl: $returnUrl
+        test: $test
+        trialDays: $trialDays
+        lineItems: [{ plan: { appRecurringPricingDetails: { price: { amount: $amount, currencyCode: USD }, interval: EVERY_30_DAYS } } }]
+      ) {
+        confirmationUrl
+        userErrors { field message }
+      }
+    }`,
+    { variables: { name: f.label, returnUrl, test: isTestShop(shop), trialDays: TRIAL_DAYS, amount: f.priceUsd } },
+  );
+  const body = (await res.json()) as {
+    data?: { appSubscriptionCreate: { confirmationUrl: string | null; userErrors: { message: string }[] } };
+  };
+  const r = body.data?.appSubscriptionCreate;
+  if (!r || r.userErrors.length) throw new Error(r?.userErrors.map((e) => e.message).join("; ") || "Billing error");
+  return r.confirmationUrl!;
+}
+
+export async function cancelSubscriptions(admin: AdminApiContext) {
+  const subs = await activeSubscriptions(admin);
+  for (const s of subs) {
+    await admin.graphql(
+      `#graphql
+      mutation cancel($id: ID!) { appSubscriptionCancel(id: $id) { userErrors { message } } }`,
+      { variables: { id: s.id } },
+    );
+  }
+}
+
+export const TRIAL_DAYS = 7;
 
 /**
  * Read the active subscription from Shopify and apply the resulting plan to the shop:
@@ -89,14 +154,7 @@ export function pricingUrl(shopDomain: string) {
 export async function syncPlan(shop: Shop, admin: AdminApiContext): Promise<Shop> {
   let plan: Plan = "FREE";
   try {
-    const res = await admin.graphql(
-      `#graphql
-      query activeSubs { currentAppInstallation { activeSubscriptions { name status test } } }`,
-    );
-    const body = (await res.json()) as {
-      data?: { currentAppInstallation: { activeSubscriptions: { name: string; status: string; test: boolean }[] } };
-    };
-    const active = body.data?.currentAppInstallation.activeSubscriptions.find((s) => s.status === "ACTIVE");
+    const active = (await activeSubscriptions(admin)).find((s) => s.status === "ACTIVE");
     plan = planFromSubscriptionName(active?.name);
   } catch {
     return shop; // keep what we have rather than downgrading on a transient API error

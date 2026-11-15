@@ -98,15 +98,15 @@ in this mode; everything else (backups, restores, scheduler) works.
 `shopify.app.dev.toml` = dev app derops-backup-dev; `scripts/dev-web.sh` runs `shopify app dev -c dev`.
 `shopify.app.local.toml` = same dev app without webhooks, for `shopify app dev --use-localhost -c local`.
 
-## Billing (Shopify managed pricing)
+## Billing (Shopify Billing API)
 
-Plans live in the Dev Dashboard (app → Distribution → Pricing), Shopify hosts the plan picker and
-bills the merchant; the app never calls the Billing API. `app/lib/billing.server.ts` maps the active
-subscription *name* to our `Plan` enum — plan names must contain "Basic", "Grow" or "Advanced"
-(anything else = FREE) — and `PLANS` holds what each plan allows (resources, cadence, retention,
-destinations, manual backups/month). `syncPlan` runs on every app page load; the
-`app_subscriptions/update` webhook applies changes immediately. Upgrade button → pricingUrl()
-(`/charges/<app-handle>/pricing_plans`); set `SHOPIFY_APP_HANDLE` if the handle isn't `derops-backup`.
+`/app/plans` creates recurring subscriptions with `appSubscriptionCreate` (7-day trial, test charges
+on development stores or when `BILLING_TEST=1`), Shopify shows its approval page, then fires
+`app_subscriptions/update`. `app/lib/billing.server.ts` maps the active subscription *name* to our
+`Plan` enum (names contain "Basic", "Grow" or "Advanced"; anything else = FREE) and `PLANS` holds what
+each plan allows. `syncPlan` also runs on every app page load as a safety net.
+Optional: `SHOPIFY_MANAGED_PRICING=1` sends "Upgrade" to Shopify's hosted plan picker instead (needs an
+App Store listing with the same plan names). `SHOPIFY_APP_HANDLE` defaults to `derops-backup`.
 
 | Plan | $/mo | Resources | Schedule | Retention | Destinations | Manual/mo |
 |---|---|---|---|---|---|---|

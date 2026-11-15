@@ -176,7 +176,7 @@ export default function Index() {
           Manual backups this month: {data.plan.manualUsed}
           {data.plan.manualLimit !== null ? ` of ${data.plan.manualLimit}` : " (unlimited)"}
         </s-paragraph>
-        <s-button href={data.plan.pricingUrl} target="_top" variant={data.shop.plan === "FREE" ? "primary" : "secondary"}>
+        <s-button href={data.plan.pricingUrl} {...(data.plan.pricingUrl.startsWith("http") ? { target: "_top" } : {})} variant={data.shop.plan === "FREE" ? "primary" : "secondary"}>
           {data.shop.plan === "FREE" ? "Upgrade" : "Change plan"}
         </s-button>
         <s-paragraph>
