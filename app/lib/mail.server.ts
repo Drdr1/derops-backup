@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 
 /**
- * Daily summary email. Configure SMTP_URL (smtp://user:pass@host:587) and MAIL_FROM.
+ * Daily summary email. Configure SMTP_URL (smtp://user:pass@host:587 — STARTTLS; 465/smtps is blocked on Hetzner) and MAIL_FROM.
  * If SMTP_URL is unset, emails are logged instead of sent (dev mode).
  */
 export async function sendMail(to: string, subject: string, text: string, html?: string) {
@@ -11,7 +11,13 @@ export async function sendMail(to: string, subject: string, text: string, html?:
     console.log(`[mail:dev] to=${to} subject="${subject}"\n${text}`);
     return { sent: false };
   }
-  const transport = nodemailer.createTransport(url);
+  // Fail fast on blocked ports (Hetzner blocks outbound 25/465 by default; use 587 STARTTLS).
+  const transport = nodemailer.createTransport({
+    url,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
+  } as never);
   await transport.sendMail({ from, to, subject, text, html });
   return { sent: true };
 }
