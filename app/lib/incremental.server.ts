@@ -32,7 +32,7 @@ export async function noteChange(shopDomain: string, resource: ResourceType) {
   await backupQueue().add(
     "incremental",
     { type: "INCREMENTAL_BACKUP", shopDomain },
-    { jobId: `incr:${shopDomain.replace(/[^a-z0-9.-]/gi, "_")}`, delay: DEBOUNCE_MS, attempts: 1, removeOnComplete: true, removeOnFail: 50 },
+    { jobId: `incr-${shopDomain.replace(/[^a-z0-9.-]/gi, "_")}`, delay: DEBOUNCE_MS, attempts: 1, removeOnComplete: true, removeOnFail: 50 },
   );
 }
 
