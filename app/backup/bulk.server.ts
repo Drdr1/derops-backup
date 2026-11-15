@@ -142,12 +142,33 @@ export function canonicalJson(v: unknown): string {
   return JSON.stringify(v);
 }
 
+/** GraphQL with retries for the transient failures Shopify produces routinely: throttling, 5xx, dropped connections. */
 export async function gql<T>(admin: Admin, query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await admin.graphql(query, variables ? { variables } : undefined);
-  const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
-  if (body.errors?.length) throw new Error(body.errors.map((e) => e.message).join("; "));
-  if (!body.data) throw new Error("GraphQL response had no data");
-  return body.data;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await admin.graphql(query, variables ? { variables } : undefined);
+      const body = (await res.json()) as { data?: T; errors?: { message: string; extensions?: { code?: string } }[] };
+      if (body.errors?.length) {
+        const throttled = body.errors.some((e) => e.extensions?.code === "THROTTLED" || /throttl/i.test(e.message));
+        if (throttled && attempt < 4) {
+          await sleep(1500 * 2 ** attempt);
+          continue;
+        }
+        throw new Error(body.errors.map((e) => e.message).join("; "));
+      }
+      if (!body.data) throw new Error("GraphQL response had no data");
+      return body.data;
+    } catch (e) {
+      lastErr = e;
+      const msg = e instanceof Error ? e.message : String(e);
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      const transient = (status && status >= 500) || status === 429 || /ECONNRESET|ETIMEDOUT|EAI_AGAIN|fetch failed|socket hang up/i.test(msg);
+      if (!transient || attempt === 4) throw e;
+      await sleep(1500 * 2 ** attempt);
+    }
+  }
+  throw lastErr;
 }
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

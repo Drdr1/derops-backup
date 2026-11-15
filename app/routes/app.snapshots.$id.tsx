@@ -262,6 +262,11 @@ export default function SnapshotPage() {
                   <s-table-cell>{i.sizeBytes ? `${(i.sizeBytes / 1024).toFixed(1)} KB` : ""}</s-table-cell>
                   <s-table-cell>
                     <s-stack direction="inline" gap="small-200">
+                    {i.changed && (
+                      <s-button variant="tertiary" href={`/app/snapshots/${data.snapshot.id}/diff?item=${i.id}`}>
+                        What changed
+                      </s-button>
+                    )}
                     {!i.deleted && (
                       <s-button variant="tertiary" onClick={() => download(`item=${i.id}`)}>
                         Download

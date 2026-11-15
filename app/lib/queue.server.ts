@@ -9,7 +9,9 @@ export type BackupJobData =
   | { type: "RESTORE_ITEM"; shopDomain: string; jobId: string; snapshotItemId: string; targetThemeId?: string }
   | { type: "RESTORE_THEME"; shopDomain: string; jobId: string; snapshotId: string; themeGid: string }
   // Fired by the per-shop job scheduler; creates its own Job row, runs backup, prunes, emails.
-  | { type: "SCHEDULED_BACKUP"; shopDomain: string; destinationId: string };
+  | { type: "SCHEDULED_BACKUP"; shopDomain: string; destinationId: string }
+  // Debounced follow-up to change webhooks; resources to back up are collected in Redis (see incremental.server.ts).
+  | { type: "INCREMENTAL_BACKUP"; shopDomain: string };
 
 let connection: IORedis | undefined;
 export function redis(): IORedis {

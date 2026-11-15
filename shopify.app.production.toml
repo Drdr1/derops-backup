@@ -36,6 +36,15 @@ api_version = "2027-01"
   uri = "/webhooks/app/subscriptions_update"
   topics = [ "app_subscriptions/update" ]
 
+  # Change feed → debounced incremental backups (paid plans)
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/changes"
+  topics = [
+    "products/create", "products/update", "products/delete",
+    "collections/create", "collections/update", "collections/delete",
+    "themes/create", "themes/update", "themes/delete", "themes/publish",
+  ]
+
   # Mandatory privacy webhooks (required for App Store review even though we store no customer data)
   [[webhooks.subscriptions]]
   uri = "/webhooks/compliance"

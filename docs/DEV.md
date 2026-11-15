@@ -114,3 +114,17 @@ App Store listing with the same plan names). `SHOPIFY_APP_HANDLE` defaults to `d
 | Basic | 9 | all | daily | 7/30 | 1 | 30 |
 | Grow | 19 | all | daily | 7/30/90/365 | 1 | unlimited |
 | Advanced | 39 | all | daily | 7/30/90/365 | 5 | unlimited |
+
+## Incremental backups (webhooks)
+
+`products/*`, `collections/*`, `themes/*` webhooks hit `/webhooks/changes`, which records the touched
+resource type in Redis (`incr:<shop>`) and enqueues one debounced `INCREMENTAL_BACKUP` job per shop
+(`INCREMENTAL_DEBOUNCE_MS`, default 5 min; BullMQ jobId makes repeats no-ops). The worker runs
+`runBackup(kind: INCREMENTAL, resources: <touched>)` — paid plans only; skipped if a backup is already
+running. Files have no webhook; they are covered by the daily run.
+
+## What changed (diff)
+
+`/app/snapshots/:id/diff?item=` compares an item with its latest earlier version with a different
+content hash: line diff (jsdiff) for text theme files, field-level table for JSONL resources, size
+only for binaries. Context collapsed to 3 lines around changes; capped at 4,000 lines.

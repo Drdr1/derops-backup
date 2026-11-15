@@ -9,6 +9,8 @@ import { Worker, type Job as BullJob } from "bullmq";
 import prisma from "../app/db.server";
 import { QUEUE_NAME, redis, type BackupJobData } from "../app/lib/queue.server";
 import { runBackup } from "../app/backup/snapshot.server";
+import { takeChanges } from "../app/lib/incremental.server";
+import { PLANS } from "../app/lib/billing.server";
 import { verifyDestination } from "../app/lib/storage.server";
 import { restoreItem, restoreTheme } from "../app/backup/restore.server";
 import { pruneShop } from "../app/backup/retention.server";
@@ -26,6 +28,7 @@ const worker = new Worker<BackupJobData>(
     };
 
     if (data.type === "SCHEDULED_BACKUP") return runScheduledBackup(data.shopDomain, data.destinationId, log);
+    if (data.type === "INCREMENTAL_BACKUP") return runIncrementalBackup(data.shopDomain, log);
 
     await prisma.job.update({
       where: { id: data.jobId },
@@ -128,7 +131,8 @@ async function runScheduledBackup(shopDomain: string, destinationId: string, log
     log(`retention failed: ${e instanceof Error ? e.message : e}`);
   }
 
-  if (shop.notifyEmail && shop.emailDaily) {
+  const failed = !!error || (result?.status && result.status !== "SUCCESS");
+  if (shop.notifyEmail && (shop.emailDaily || failed)) {
     const snap = result ? await prisma.snapshot.findUnique({ where: { id: result.snapshotId } }) : null;
     const perResource: Record<string, { count: number; error?: string }> = {};
     if (snap) {
@@ -159,6 +163,41 @@ async function runScheduledBackup(shopDomain: string, destinationId: string, log
 
   if (error) throw new Error(error);
   return result;
+}
+
+async function runIncrementalBackup(shopDomain: string, log: (m: string) => void) {
+  const resources = await takeChanges(shopDomain);
+  const shop = await prisma.shop.findUnique({ where: { domain: shopDomain }, include: { destinations: { where: { verifiedAt: { not: null } }, orderBy: { createdAt: "asc" }, take: 1 } } });
+  if (!shop || shop.uninstalledAt || shop.destinations.length === 0) {
+    log("shop missing, uninstalled or no destination; skipping");
+    return { skipped: true };
+  }
+  if (PLANS[shop.plan].schedule !== "daily") {
+    log(`plan ${shop.plan} has no real-time backups; skipping`);
+    return { skipped: true, reason: "plan" };
+  }
+  if (resources.length === 0) {
+    log("no changes recorded; skipping");
+    return { skipped: true };
+  }
+  // Skip if a backup is already running for this shop; the daily/next run will pick the changes up.
+  const running = await prisma.job.count({ where: { shopId: shop.id, type: "BACKUP_FULL", status: "RUNNING" } });
+  if (running) {
+    log("a backup is already running; skipping");
+    return { skipped: true, reason: "busy" };
+  }
+  const row = await prisma.job.create({
+    data: { shopId: shop.id, type: "BACKUP_INCREMENTAL", status: "RUNNING", startedAt: new Date(), payload: { destinationId: shop.destinations[0].id, resources } },
+  });
+  try {
+    const result = await runBackup({ shopDomain, destinationId: shop.destinations[0].id, kind: "INCREMENTAL", jobId: row.id, resources, log });
+    await prisma.job.update({ where: { id: row.id }, data: { status: "SUCCESS", finishedAt: new Date(), result: result as never } });
+    return result;
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    await prisma.job.update({ where: { id: row.id }, data: { status: "FAILED", finishedAt: new Date(), error } });
+    throw e;
+  }
 }
 
 worker.on("ready", () => console.log(`worker ready on queue "${QUEUE_NAME}" (concurrency ${concurrency})`));
