@@ -7,6 +7,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { cronForHour, describeCron, hourFromCron, syncShopSchedule } from "../lib/schedule.server";
 import { PLANS, pricingUrl } from "../lib/billing.server";
+import { sendMail } from "../lib/mail.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -34,6 +35,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = await prisma.shop.findUniqueOrThrow({ where: { domain: session.shop } });
   const form = await request.formData();
+
+  if (form.get("intent") === "testEmail") {
+    const to = String(form.get("notifyEmail") || shop.notifyEmail || "").trim();
+    if (!to) return { ok: false, error: "Enter a notification email first." };
+    try {
+      const r = await sendMail(
+        to,
+        `${shop.name ?? shop.domain}: test email from DerOps Backup`,
+        `This is a test from DerOps Backup for ${shop.domain}.\nDaily summaries and failure alerts will arrive at this address.`,
+      );
+      return { ok: true, message: r.sent ? `Test email sent to ${to}` : "SMTP is not configured on the server; the email was logged instead." };
+    } catch (e) {
+      return { ok: false, error: `Could not send: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
 
   const hour = Math.min(23, Math.max(0, Number(form.get("hour") ?? 3)));
   const timezone = String(form.get("timezone") || shop.timezone || "UTC").trim();
@@ -119,6 +135,18 @@ export default function Settings() {
               details="Daily summary and failure alerts. Pre-filled with the store owner email."
             />
             <s-checkbox label="Send a daily summary after each scheduled backup" name="emailDaily" value="1" {...(data.emailDaily ? { checked: true } : {})} />
+            <s-button
+              type="button"
+              variant="secondary"
+              disabled={busy ? true : undefined}
+              onClick={(e: Event) => {
+                const form = (e.currentTarget as HTMLElement).closest("form") as HTMLFormElement | null;
+                const email = (form?.querySelector('[name="notifyEmail"]') as HTMLInputElement | null)?.value ?? "";
+                fetcher.submit({ intent: "testEmail", notifyEmail: email }, { method: "post" });
+              }}
+            >
+              Send test email
+            </s-button>
             <s-button type="submit" variant="primary" {...(busy ? { loading: true } : {})}>
               Save
             </s-button>
