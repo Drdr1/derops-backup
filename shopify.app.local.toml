@@ -23,7 +23,7 @@ read_locations\
 """
 
 [webhooks]
-api_version = "2027-01"
+api_version = "2026-10"
 
 [auth]
 redirect_urls = [ "https://localhost:3458/api/auth" ]
