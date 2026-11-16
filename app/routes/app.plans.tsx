@@ -6,7 +6,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import type { Plan } from "@prisma/client";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { PLANS, TRIAL_DAYS, applyPlan, cancelSubscriptions, createSubscription, isTestShop, syncPlan } from "../lib/billing.server";
+import { PLANS, TRIAL_DAYS, applyPlan, cancelSubscriptions, createSubscription, isTestShop, pricingUrl, syncPlan } from "../lib/billing.server";
 
 const ORDER: Plan[] = ["FREE", "BASIC", "GROW", "ADVANCED"];
 
@@ -15,6 +15,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let shop = await prisma.shop.findUniqueOrThrow({ where: { domain: session.shop } });
   shop = await syncPlan(shop, admin); // picks up a just-approved subscription on return from Shopify
   return {
+    // Managed pricing: Shopify hosts plan selection; our buttons just open its page.
+    managedUrl: process.env.SHOPIFY_MANAGED_PRICING === "1" ? pricingUrl(shop.domain) : null,
     current: shop.plan,
     test: isTestShop(shop),
     trialDays: TRIAL_DAYS,
@@ -98,6 +100,10 @@ export default function PlansPage() {
                       variant={p.id === "GROW" ? "primary" : "secondary"}
                       disabled={busy ? true : undefined}
                       onClick={() => {
+                        if (data.managedUrl) {
+                          window.open(data.managedUrl, "_top");
+                          return;
+                        }
                         if (p.id === "FREE" && !confirm("Downgrade to Free? Daily backups become weekly and only themes are backed up.")) return;
                         fetcher.submit({ plan: p.id }, { method: "post" });
                       }}
