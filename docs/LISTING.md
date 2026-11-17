@@ -25,11 +25,10 @@ that you own — Cloudflare R2, Amazon S3, Backblaze B2, Wasabi or any S3-compat
 day, within minutes of a change on paid plans, and whenever you press "Back up now".
 
 **Restore what broke, not everything.** Open any snapshot, find the product or theme file, see
-exactly what changed line by line, and restore that one item. Restore a whole theme as a new
-unpublished theme and preview it before you publish.
+exactly what changed line by line, and restore that one item back into the store.
 
-**Your bucket, your files.** Backups are plain JSON Lines and the original theme and image files,
-in folders you can browse without this app. If you ever uninstall, everything stays where it is.
+**Your bucket, your data.** Backups live in storage you own and control, in an open JSON Lines
+format. If you ever uninstall, your backup history stays where it is.
 Credentials for your bucket are encrypted; we never see your customers or orders.
 
 **Only pays for what changed.** Unchanged files are never uploaded twice, so a 1,500-file theme
@@ -39,14 +38,14 @@ costs kilobytes a day, not megabytes.
 that shows item counts, changes and size for every run.
 
 What is backed up: products (variants, options, metafields), collections, every theme file of every
-theme, and uploaded files/media. Restore: individual products, individual theme files, whole themes.
+theme, and uploaded files/media. Restore: individual products and individual theme files, back into the store.
 Customers and orders are not accessed.
 
 Setup takes five minutes: create a bucket, paste an access key, press Back up now.
 
 ## Feature bullets (listing "key benefits", ≤ 80 chars each)
 1. Daily and near-real-time backups to an S3 bucket you own
-2. Restore a single product or theme file, or a whole theme as a draft
+2. Restore a single product or theme file in one click
 3. Line-by-line "what changed" view for every backed-up item
 4. Open format: JSON Lines plus original files, readable without the app
 5. Email summary after every run and an alert when a backup fails
@@ -61,7 +60,7 @@ Setup takes five minutes: create a bucket, paste an access key, press Back up no
 
 ## Screenshots (1600×900 PNG, real UI, no browser chrome; 3–6 of them)
 1. Home — snapshot list with SUCCESS rows, items/changed/size columns, "Back up now".
-2. Snapshot → Theme files tab with "What changed" / Download / Restore buttons.
+2. Snapshot → Theme files tab with "What changed" / "Restore this version" buttons (no download controls).
 3. "What changed" diff of a liquid file (green/red lines).
 4. Destinations — verified R2 bucket card + "Why your own bucket?" aside.
 5. Settings — schedule, retention, notification email.
@@ -72,8 +71,8 @@ Caption each in ≤ 60 chars, e.g. "Every run, at a glance", "Restore one file, 
 Test store: derops-backup-dev.myshopify.com (add reviewer as staff if requested).
 Steps: Install → Destinations → add bucket (test credentials provided below) → Test connection →
 Home → Back up now (≈1 min) → open snapshot → Theme files → pick a file → What changed / Restore.
-Whole-theme restore: Theme files tab → "Restore as new theme" → appears in Online Store → Themes as
-an unpublished theme. The app never modifies the live theme.
+Theme files are never downloadable and whole themes are never created or installed by the app
+(requirement 1.1.3); a theme file can only be restored in place into the theme it was backed up from.
 Provide: a throwaway R2 bucket + read/write token for the reviewer (create a separate token; revoke after review).
 
 ## Required for submission checklist

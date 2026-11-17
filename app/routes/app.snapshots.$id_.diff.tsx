@@ -30,7 +30,7 @@ export default function DiffPage() {
         {d.diff.mode === "deleted" && <s-paragraph>This item was gone from the store when this snapshot ran. Restore it from an earlier snapshot.</s-paragraph>}
         {d.diff.mode === "binary" && (
           <s-paragraph>
-            Binary file changed: {(d.diff.beforeBytes / 1024).toFixed(1)} KB → {(d.diff.afterBytes / 1024).toFixed(1)} KB. Download either version to compare.
+            Binary file changed: {(d.diff.beforeBytes / 1024).toFixed(1)} KB → {(d.diff.afterBytes / 1024).toFixed(1)} KB.
           </s-paragraph>
         )}
         {d.previousAt && <s-paragraph>Compared with the version from {new Date(d.previousAt).toLocaleString()}.</s-paragraph>}

@@ -73,9 +73,9 @@ Snapshot detail page: `/app/snapshots/<id>` — filter by resource / title / cha
 
 Shopify granted the theme-write exemption (Nov 12 2026) for backup/restore use only.
 - Single file: `themeFilesUpsert` into the original theme (overwrites that file).
-- Whole theme: `themeCreate` from a 1-hour presigned URL of a zip we write to
-  `<prefix>/_restore/` in the merchant's bucket; the zip is deleted after Shopify
-  finishes processing. Always creates a NEW unpublished theme — never touches the live one.
+- No whole-theme restore and no theme downloads (removed Nov 17 2026 after App Store review,
+  requirement 1.1.3: themes may only be installed via the Theme Store). Theme files are never
+  served to the browser; product/collection/file records can be downloaded as JSON.
 - Per the exemption, the app must never install/distribute/upload themes other than the merchant's own backups.
 
 ## No tunnel? Run on localhost

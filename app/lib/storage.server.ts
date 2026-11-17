@@ -27,7 +27,7 @@ export type Storage = {
   getFull(fullKey: string): Promise<Buffer>;
   del(key: string): Promise<void>;
   list(prefix: string): Promise<string[]>;
-  /** Time-limited HTTPS URL for a GET of this key (used to hand a theme zip to Shopify). */
+  /** Time-limited HTTPS URL for a GET of this key . */
   presignGet(key: string, expiresInSeconds?: number): Promise<string>;
   fullKey(relative: string): string;
 };

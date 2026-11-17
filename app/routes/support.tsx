@@ -18,7 +18,7 @@ export default function Support() {
       <p>Check the endpoint has no bucket name or path on the end, the region is <code>auto</code> for R2 (the real region for AWS/B2/Wasabi), and the token has write permission on that bucket.</p>
 
       <h3>What does a restore change?</h3>
-      <p>Restoring a product or a single theme file overwrites that one item with the backed-up version. Restoring a whole theme creates a new unpublished theme in Online Store → Themes; your live theme is untouched until you publish it.</p>
+      <p>Restoring a product or a single theme file overwrites that one item with the backed-up version.</p>
 
       <h3>Can I read the backups without the app?</h3>
       <p>Yes. Each snapshot is a folder in your bucket with a <code>manifest.json</code>, one <code>.jsonl</code> file per resource (one JSON object per line) and theme/file originals under <code>themes/</code> and <code>files/</code>.</p>

@@ -41,22 +41,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     take: PAGE,
   });
 
-  // Themes present in this snapshot (for "Download theme as .zip")
-  const themeFiles = await prisma.snapshotItem.findMany({
-    where: { snapshotId: snapshot.id, resource: "THEME_FILE", deleted: false },
-    select: { shopifyGid: true, title: true },
-  });
-  const themesMap = new Map<string, { gid: string; name: string; files: number }>();
-  for (const f of themeFiles) {
-    const gid = f.shopifyGid.split("#")[0];
-    const name = (f.title ?? "").split(" / ")[0] || gid.split("/").pop()!;
-    const t = themesMap.get(gid) ?? { gid, name, files: 0 };
-    t.files++;
-    themesMap.set(gid, t);
-  }
-
   const recentRestores = await prisma.job.findMany({
-    where: { shopId: shop.id, type: { in: ["RESTORE_ITEM", "RESTORE_THEME"] } },
+    where: { shopId: shop.id, type: "RESTORE_ITEM" },
     orderBy: { createdAt: "desc" },
     take: 5,
   });
@@ -84,7 +70,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       sizeBytes: i.sizeBytes,
     })),
     truncated: items.length === PAGE,
-    themes: [...themesMap.values()],
     recentRestores: recentRestores.map((j) => ({
       id: j.id,
       status: j.status,
@@ -100,22 +85,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = await prisma.shop.findUniqueOrThrow({ where: { domain: session.shop } });
   const form = await request.formData();
-
-  if (form.get("intent") === "restoreTheme") {
-    const snapshotId = String(form.get("snapshotId") || "");
-    const themeGid = String(form.get("themeGid") || "");
-    const snap = await prisma.snapshot.findFirst({ where: { id: snapshotId, shopId: shop.id }, select: { id: true } });
-    if (!snap || !themeGid.startsWith("gid://shopify/OnlineStoreTheme/")) return { ok: false, error: "Theme not found" };
-    const job = await prisma.job.create({
-      data: { shopId: shop.id, type: "RESTORE_THEME", status: "QUEUED", payload: { snapshotId, themeGid } },
-    });
-    await backupQueue().add(
-      "restore-theme",
-      { type: "RESTORE_THEME", shopDomain: shop.domain, jobId: job.id, snapshotId, themeGid },
-      { attempts: 1 },
-    );
-    return { ok: true };
-  }
 
   const snapshotItemId = String(form.get("snapshotItemId") || "");
 
@@ -163,12 +132,7 @@ export default function SnapshotPage() {
     return () => clearInterval(t);
   }, [data.pendingRestores, revalidator]);
 
-  const restoreTheme = (themeGid: string, name: string) => {
-    if (!confirm(`Restore "${name}" from this snapshot as a new unpublished theme?`)) return;
-    fetcher.submit({ intent: "restoreTheme", snapshotId: data.snapshot.id, themeGid }, { method: "post" });
-  };
-
-  // Downloads are plain GETs to an app route; attach a fresh session token so authenticate.admin accepts them.
+  // Downloads (product/collection/file records as JSON — never theme files) are plain GETs; attach a fresh session token so authenticate.admin accepts them.
   const download = async (query: string) => {
     const token = await shopify.idToken();
     const a = document.createElement("a");
@@ -205,34 +169,6 @@ export default function SnapshotPage() {
         </form>
       </s-section>
 
-      {data.resource === "THEME_FILE" && data.themes.length > 0 && (
-        <s-section heading="Restore a whole theme">
-          <s-paragraph>
-            Restore creates a <b>new unpublished theme</b> from this snapshot — your live theme is never modified. Preview it in
-            Online Store → Themes and publish when you are happy. Or download the .zip and keep it anywhere.
-          </s-paragraph>
-          <s-stack direction="block" gap="base">
-            {data.themes.map((t) => (
-              <s-stack key={t.gid} direction="inline" gap="base" alignItems="center">
-                <s-text>
-                  <b>{t.name}</b> · {t.files} files
-                </s-text>
-                <s-button
-                  variant="primary"
-                  disabled={data.pendingRestores > 0 ? true : undefined}
-                  onClick={() => restoreTheme(t.gid, t.name)}
-                >
-                  Restore as new theme
-                </s-button>
-                <s-button variant="tertiary" onClick={() => download(`theme=${encodeURIComponent(t.gid)}`)}>
-                  Download .zip
-                </s-button>
-              </s-stack>
-            ))}
-          </s-stack>
-        </s-section>
-      )}
-
       <s-section heading={`${RESOURCE_LABELS[data.resource] ?? data.resource} · ${data.items.length}${data.truncated ? "+" : ""}`}>
         {data.items.length === 0 ? (
           <s-paragraph>Nothing here.</s-paragraph>
@@ -267,7 +203,7 @@ export default function SnapshotPage() {
                         What changed
                       </s-button>
                     )}
-                    {!i.deleted && (
+                    {!i.deleted && data.resource !== "THEME_FILE" && (
                       <s-button variant="tertiary" onClick={() => download(`item=${i.id}`)}>
                         Download
                       </s-button>
